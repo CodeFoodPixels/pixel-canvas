@@ -1,0 +1,24 @@
+html, body {
+  height: 100%;
+}
+
+body {
+  display: flex;
+  margin: 0;
+  flex-direction: column;
+}
+
+#tools {
+  flex: 0 0 150px;
+}
+
+#canvasContainer {
+  flex: 1;
+  font-size: 0;
+}
+
+@media (min-aspect-ratio: 1/1) {
+    body {
+        flex-direction: row;
+    }
+}
