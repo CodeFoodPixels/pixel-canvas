@@ -1,63 +1,100 @@
-function setupCanvas(width, height) {
-  let widthPixel = Math.floor(window.innerWidth/width);
-  let heightPixel = Math.floor(window.innerHeight/height);
-
-  const canvasContainer = document.querySelector('#canvasContainer');
-  
-  let pixelSize = widthPixel < heightPixel ? widthPixel : heightPixel;
-  
-  let zooming = false;
-  let prevPinchDistance = 0;
-  
-  const gridData = [];
-  
-  for (let x = 0; x < width; x++) {
-    gridData[x] = [];
-    for (let y = 0; y < height; y++) {
-      gridData[x][y] = '#000000';
+function setupEditor(width, height) {
+  const state = {
+    dimensions: {
+      width: 0,
+      height: 0
+    },
+    pixelSize: getDefaultPixelSize(width, height),
+    zooming: false,
+    prevPinchDistance: 0,
+    gridData: setupGridData(),
+    ctx: undefined,
+    color: '#ffffff',
+    position: {
+      x: 0, 
+      y: 0
+    },
+    gridStart: {
+      x: 0,
+      y: 0
     }
+  };
+  
+  function getDefaultPixelSize(width, height) {
+    const canvasContainer = document.querySelector('#canvasContainer');
+    const widthPixel = Math.floor(canvasContainer.offsetWidth / width);
+    const heightPixel = Math.floor(canvasContainer.offsetHeight / height);
+    
+    return (widthPixel < heightPixel ? widthPixel : heightPixel) * 0.9;
   }
   
-  const canvas = document.createElement('canvas');
-  canvas.setAttribute('width', canvasContainer.offsetWidth);
-  canvas.setAttribute('height', canvasContainer.offsetHeight);
+  function setupGridData() {
+    const gridData = [];
+    
+    for (let x = 0; x < width; x++) {
+      gridData[x] = [];
+      for (let y = 0; y < height; y++) {
+        gridData[x][y] = '#000000';
+      }
+    }
+    
+    return gridData;
+  }
+  
+  function setupCanvas() {
+    const canvasContainer = document.querySelector('#canvasContainer');
+  
+    state.dimensions.width = canvasContainer.offsetWidth;
+    state.dimensions.height = canvasContainer.offsetHeight;
+    
+    const canvas = document.createElement('canvas');
+    
+    canvas.setAttribute('id', 'pixelCanvas');
+    canvas.setAttribute('width', canvasContainer.offsetWidth);
+    canvas.setAttribute('height', canvasContainer.offsetHeight);
 
-  canvasContainer.appendChild(canvas);
+    canvasContainer.appendChild(canvas);
 
-  let color = '#ffffff';
-  const colorPicker = document.querySelector('#color');
-  const ctx = window.ctx = canvas.getContext('2d');
+    state.ctx = canvas.getContext('2d');
+    
+    repositionCanvas();
+  }
   
-  ctx.translate((canvasContainer.offsetWidth / 2), (canvasContainer.offsetHeight / 2));
-  ctx.scale(pixelSize, pixelSize);
-  ctx.translate((canvasContainer.offsetWidth / 2) * -1, (canvasContainer.offsetHeight / 2) * -1);
-  
-  let xPos = (canvasContainer.offsetWidth / 2) - ((canvasContainer.offsetWidth / 2) / pixelSize);
-  let yPos = (canvasContainer.offsetHeight / 2) - ((canvasContainer.offsetHeight / 2) / pixelSize);
-  
-  let xStart = (canvasContainer.offsetWidth / 2) - (width / 2);
-  let xEnd = xStart + width;
-  let yStart = (canvasContainer.offsetHeight/ 2) - (height / 2);
-  let yEnd = yStart + height;
-  
-  redraw();
+  function repositionCanvas() {
+    state.ctx.translate((state.dimensions.width / 2), (state.dimensions.height / 2));
+    state.ctx.scale(state.pixelSize, state.pixelSize);
+    state.ctx.translate((state.dimensions.width / 2) * -1, (state.dimensions.height / 2) * -1);
+
+    state.position.x = (state.dimensions.width / 2) - ((state.dimensions.width / 2) / state.pixelSize);
+    state.position.y = (state.dimensions.height / 2) - ((state.dimensions.height / 2) / state.pixelSize);
+
+    state.gridStart.x = (state.dimensions.width / 2) - (width / 2);
+    state.gridStart.y = (state.dimensions.height/ 2) - (height / 2);
+
+    redraw();
+  }
   
   function isDrawable(x, y) {
-    if (x < xStart) return false;
-    if (x > xEnd) return false;
-    if (y < yStart) return false;
-    if (y > yEnd) return false;
+    if (x < state.gridStart.x) return false;
+    if (x >= state.gridStart.x + width) return false;
+    if (y < state.gridStart.y) return false;
+    if (y >= state.gridStart.y + height) return false;
     
     return true;
   }
   
   function redraw() {
-    ctx.clearRect(0, 0, canvasContainer.offsetWidth , canvasContainer.offsetHeight);
+    state.ctx.clearRect(0, 0, state.dimensions.width , state.dimensions.height);
+    state.ctx.fillStyle = '#ff0000';
+    
+    const borderSize = Math.max(2 / state.pixelSize, 0.1)
+    
+    state.ctx.fillRect(state.gridStart.x - borderSize, state.gridStart.y - borderSize, width + (borderSize * 2), height + (borderSize * 2));
     
     for (let x = 0; x < width; x++) {
       for (let y = 0; y < height; y++) {
-        ctx.fillStyle = gridData[x][y];
-        ctx.fillRect(xStart + (x - 0.01), yStart + (y - 0.01), 1.02, 1.02);
+        state.ctx.fillStyle = state.gridData[x][y];
+        state.ctx.fillRect(state.gridStart.x + (x - 0.01), state.gridStart.y + (y - 0.01), 1.02, 1.02);
       }
     }
   }
@@ -65,26 +102,28 @@ function setupCanvas(width, height) {
   function drawPixel(x, y, color) {    
     ({x, y} = getScaledCoords(x, y));
     
-    const xReference = Math.floor(x - xStart);
-    const yReference = Math.floor(y - yStart);
-    const xPixel = xReference + xStart;
-    const yPixel = yReference + yStart;
+    const xReference = Math.floor(x - state.gridStart.x);
+    const yReference = Math.floor(y - state.gridStart.y);
+    const xPixel = xReference + state.gridStart.x;
+    const yPixel = yReference + state.gridStart.y;
     
     if (isDrawable(xPixel, yPixel)) {
-      ctx.fillStyle = color;
-      ctx.fillRect(xPixel - 0.01, yPixel - 0.01, 1.02, 1.02);
-      gridData[xReference][yReference] = color;
+      state.ctx.fillStyle = color;
+      state.ctx.fillRect(xPixel - 0.01, yPixel - 0.01, 1.02, 1.02);
+      state.gridData[xReference][yReference] = color;
     }
   }
   
   function getScaledCoords(x, y) {
       return {
-        x: xPos + (x / pixelSize),
-        y: yPos + (y / pixelSize)
+        x: state.position.x + (x / state.pixelSize),
+        y: state.position.y + (y / state.pixelSize)
       }
   }
 
   function getCanvasCoords(x, y) {
+    const canvas = document.querySelector('#pixelCanvas');
+    
     return {
      x: x - canvas.offsetLeft,
      y: y - canvas.offsetTop
@@ -109,14 +148,16 @@ function setupCanvas(width, height) {
 
   function onMouseDown(e) {
     const position = getCanvasCoords(e.pageX, e.pageY);
-    drawPixel(position.x, position.y, color);
+    const canvas = document.querySelector('#pixelCanvas');
+    
+    drawPixel(position.x, position.y, state.color);
     canvas.addEventListener('mousemove', moveDraw);
-    canvas.addEventListener('touchmove', onTouchMove);
   }
 
   function onMouseUp(e) {
+    const canvas = document.querySelector('#pixelCanvas');
+    
     canvas.removeEventListener('mousemove', moveDraw);
-    canvas.removeEventListener('touchmove', onTouchMove);
   }
 
   function onTouchMove(e) {
@@ -125,28 +166,32 @@ function setupCanvas(width, height) {
       return moveDraw(e.touches[0]);
     }
     
-    if (zooming) {
-          const distance = Math.hypot(
-            e.touches[0].pageX - e.touches[1].pageX,
-            e.touches[0].pageY - e.touches[1].pageY
-          );
-
-          const x = (e.touches[0].pageX + e.touches[1].pageX) / 2;
-          const y = (e.touches[0].pageY + e.touches[1].pageY) / 2;
-
-          zoom((distance - prevPinchDistance) / 40, x, y);
-
-          prevPinchDistance = distance;
-      }
+    if (state.zooming) {
+      pinchZoom(e);      
+    }
   }
+  
+  const pinchZoom = throttle(function(e) {
+    const distance = Math.hypot(
+      e.touches[0].pageX - e.touches[1].pageX,
+      e.touches[0].pageY - e.touches[1].pageY
+    );
+
+    const x = (e.touches[0].pageX + e.touches[1].pageX) / 2;
+    const y = (e.touches[0].pageY + e.touches[1].pageY) / 2;
+
+    zoom((distance - state.prevPinchDistance) / 40, x, y);
+
+    state.prevPinchDistance = distance;
+  }, 100)
 
   function moveDraw(e) {
     const position = getCanvasCoords(e.pageX, e.pageY);
 
-    const pixelData = ctx.getImageData( position.x, position.y, 1, 1).data;
+    const pixelData = state.ctx.getImageData( position.x, position.y, 1, 1).data;
 
-    if (color !== getHexCode(pixelData)) {
-      drawPixel(position.x, position.y, color);
+    if (state.color !== getHexCode(pixelData)) {
+      drawPixel(position.x, position.y, state.color);
     }
   }
   
@@ -154,17 +199,21 @@ function setupCanvas(width, height) {
       ({x, y} = getCanvasCoords(x, y));
       
       const factor = Math.pow(1.1, steps);
+      
+      if (state.pixelSize * factor < 1) {
+        return;
+      }
     
-      ctx.translate(xPos, yPos);
+      state.ctx.translate(state.position.x, state.position.y);
 
-      xPos = ( x / pixelSize + xPos - x / ( pixelSize * factor ) );
-      yPos = ( y / pixelSize + yPos - y / ( pixelSize * factor ) );
+      state.position.x = ( x / state.pixelSize + state.position.x - x / ( state.pixelSize * factor ) );
+      state.position.y = ( y / state.pixelSize + state.position.y - y / ( state.pixelSize * factor ) );
 
-      ctx.scale(factor, factor);
+      state.ctx.scale(factor, factor);
 
-      ctx.translate(xPos * -1, yPos * -1);
+      state.ctx.translate(state.position.x * -1, state.position.y * -1);
 
-      pixelSize *= factor;
+      state.pixelSize *= factor;
     
       requestAnimationFrame(redraw);
   }
@@ -172,6 +221,22 @@ function setupCanvas(width, height) {
   function onScroll(e) {
       e.preventDefault() 
       zoom(e.deltaY / 40, e.clientX, e.clientY);
+  }
+  
+  function onResize(e) {
+      const canvas = document.querySelector('#pixelCanvas');
+      const canvasContainer = document.querySelector('#canvasContainer');
+    
+      canvas.setAttribute('width', 0);
+      canvas.setAttribute('height', 0);
+    
+      state.dimensions.height = canvasContainer.offsetHeight;
+      state.dimensions.width = canvasContainer.offsetWidth;
+    
+      canvas.setAttribute('width', state.dimensions.width);
+      canvas.setAttribute('height', state.dimensions.height);
+  
+      repositionCanvas();
   }
 
   function debounce(func, wait) {
@@ -189,66 +254,71 @@ function setupCanvas(width, height) {
         
           timeout = setTimeout(later, wait);
       };
-  };
+  }
   
-  canvas.addEventListener('mousedown', onMouseDown);
-  canvas.addEventListener('mouseup', onMouseUp);
-
-  canvas.addEventListener('touchstart', debounce((e) => {
-      if (e.touches.length > 1) {
-          zooming = true;
-          
-          prevPinchDistance = Math.hypot(
-              e.touches[0].pageX - e.touches[1].pageX,
-              e.touches[0].pageY - e.touches[1].pageY
-          );
-        
-          return;
-      }
+  function throttle(fn, threshhold) {
+    let last;
+    let deferTimer;
     
-      onMouseDown(e.touches[0]);
-  }));
-  
-  document.addEventListener('touchmove', onTouchMove);
-  
-  canvas.addEventListener('touchend', (e) => {
-      prevPinchDistance = 0;
-      zooming = false;
+    return function () {
+      let now = +new Date;
+      let args = arguments;
       
-      onMouseUp(e);
-  });
+      if (last && now < last + threshhold) {
+        clearTimeout(deferTimer);
+        deferTimer = setTimeout(function () {
+          last = now;
+          fn.apply(this, args);
+        }.bind(this), threshhold);
+      } else {
+        last = now;
+        fn.apply(this, args);
+      }
+    };
+  }
   
-  canvas.addEventListener('wheel', onScroll);
+  function setupCanvasListeners() {
+    const canvas = document.querySelector('#pixelCanvas');
+    
+    canvas.addEventListener('mousedown', onMouseDown);
+    canvas.addEventListener('mouseup', onMouseUp);
 
-  colorPicker.addEventListener('change', () => {
-    color = colorPicker.value;
+    canvas.addEventListener('touchstart', debounce((e) => {
+        if (e.touches.length > 1) {
+            state.zooming = true;
+
+            state.prevPinchDistance = Math.hypot(
+                e.touches[0].pageX - e.touches[1].pageX,
+                e.touches[0].pageY - e.touches[1].pageY
+            );
+
+            return;
+        }
+
+        onMouseDown(e.touches[0]);
+    }, 100));
+
+    canvas.addEventListener('touchmove', onTouchMove);
+
+    canvas.addEventListener('touchend', (e) => {
+        state.prprevPinchDistance = 0;
+        state.zooming = false;
+
+        onMouseUp(e);
+    });
+
+    canvas.addEventListener('wheel', throttle(onScroll, 100));
+  }
+  
+  setupCanvas();
+  
+  setupCanvasListeners();
+  
+  document.querySelector('#color').addEventListener('change', (e) => {
+    state.color = e.target.value;
   })
   
-  window.addEventListener('resize', () => {
-      canvas.setAttribute('width', 0);
-      canvas.setAttribute('height', 0);
-      canvas.setAttribute('width', canvasContainer.offsetWidth);
-      canvas.setAttribute('height', canvasContainer.offsetHeight);
-  
-      widthPixel = Math.floor(window.innerWidth/width);
-      heightPixel = Math.floor(window.innerHeight/height);
-  
-      pixelSize = widthPixel < heightPixel ? widthPixel : heightPixel;
-    
-      ctx.translate((canvasContainer.offsetWidth / 2), (canvasContainer.offsetHeight / 2));
-      ctx.scale(pixelSize, pixelSize);
-      ctx.translate((canvasContainer.offsetWidth / 2) * -1, (canvasContainer.offsetHeight / 2) * -1);
-  
-      xPos = (canvasContainer.offsetWidth / 2) - ((canvasContainer.offsetWidth / 2) / pixelSize);
-      yPos = (canvasContainer.offsetHeight / 2) - ((canvasContainer.offsetHeight / 2) / pixelSize);
-  
-      xStart = (canvasContainer.offsetWidth / 2) - (width / 2);
-      xEnd = xStart + width;
-      yStart = (canvasContainer.offsetHeight/ 2) - (height / 2);
-      yEnd = yStart + height;
-
-      redraw();
-  });
+  window.addEventListener('resize', debounce(onResize, 100));
 }
 
-setupCanvas(16, 16)
+setupEditor(16, 16)
